@@ -25,6 +25,19 @@ def get_train_valid_sampler(trainset, valid=0.1):
 
 def get_IEMOCAP_loaders(path, batch_size=32, valid=0.1, num_workers=0, pin_memory=False):
     trainset = IEMOCAPDataset(path=path)
+
+    label_train = [0 ,0 ,0, 0, 0, 0]
+    label_test = [0 ,0 ,0, 0, 0, 0]
+
+    for i in trainset:
+        for j in range(0, int(torch.sum(i[4]).item())):
+            label_train[i[5][j].item()] += 1
+
+    sum_train = sum(label_train)
+
+    for i in range(0, 6):
+        label_train[i] = label_train[i] / sum_train
+       
     train_sampler, valid_sampler = get_train_valid_sampler(trainset, valid)
     train_loader = DataLoader(trainset,
                               batch_size=batch_size,
@@ -40,6 +53,21 @@ def get_IEMOCAP_loaders(path, batch_size=32, valid=0.1, num_workers=0, pin_memor
                               pin_memory=pin_memory)
 
     testset = IEMOCAPDataset(path=path, train=False)
+
+    for i in testset:
+        for j in range(0, int(torch.sum(i[4]).item())):
+            label_test[i[5][j].item()] += 1
+
+    sum_test = sum(label_test)
+
+    for i in range(0, 6):
+        label_test[i] = label_test[i] / sum_test
+
+    label_weight = [0, 0, 0, 0, 0, 0]
+
+    for i in range(0, 6):
+        label_weight[i] = (label_train[i] * 0.8) + (label_test[i] * 0.2)
+    
     test_loader = DataLoader(testset,
                              batch_size=batch_size,
                              collate_fn=testset.collate_fn,
@@ -65,8 +93,15 @@ def train_or_eval_model(model, loss_function, dataloader, epoch, optimizer=None,
         # import ipdb;ipdb.set_trace()
         textf, visuf, acouf, qmask, umask, label =\
                 [d.cuda() for d in data[:-1]] if cuda else data[:-1]
-        #log_prob = model(torch.cat((textf,acouf,visuf),dim=-1), qmask,umask,att2=True) # seq_len, batch, n_classes
-        log_prob, alpha, alpha_f, alpha_b = model(textf, qmask,umask,att2=True) # seq_len, batch, n_classes
+         #log_prob = model(torch.cat((textf,acouf,visuf),dim=-1), qmask,umask,att2=True) # seq_len, batch, n_classes
+        log_prob, alpha, alpha_f, alpha_b = model(textf, qmask,umask,att2=False, bidirectional = False) 
+        # seq_len, batch, n_classes, uni-directional without attention
+        #log_prob, alpha, alpha_f, alpha_b = model(textf, qmask,umask,att2=True, bidirectional = False) 
+        # # seq_len, batch, n_classes, uni-directional with attention
+        #log_prob, alpha, alpha_f, alpha_b = model(textf, qmask,umask,att2=False, bidirectional = True) 
+        # # seq_len, batch, n_classes, bidirectional without attention
+        #log_prob, alpha, alpha_f, alpha_b = model(textf, qmask,umask,att2=True, bidirectional = True) 
+        # # seq_len, batch, n_classes, bidirectional with attention
         lp_ = log_prob.transpose(0,1).contiguous().view(-1,log_prob.size()[2]) # batch*seq_len, n_classes
         labels_ = label.view(-1) # batch*seq_len
         loss = loss_function(lp_, labels_, umask)
@@ -102,7 +137,8 @@ def train_or_eval_model(model, loss_function, dataloader, epoch, optimizer=None,
     return avg_loss, avg_accuracy, labels, preds, masks,avg_fscore, [alphas, alphas_f, alphas_b, vids]
 
 if __name__ == '__main__':
-
+    torch.cuda.empty_cache()
+    
     parser = argparse.ArgumentParser()
     parser.add_argument('--no-cuda', action='store_true', default=False,
                         help='does not use GPU')
@@ -160,13 +196,14 @@ if __name__ == '__main__':
                     dropout=args.dropout)
     if cuda:
         model.cuda()
+    
     loss_weights = torch.FloatTensor([
-                                        1/0.086747,
-                                        1/0.144406,
-                                        1/0.227883,
-                                        1/0.160585,
-                                        1/0.127711,
-                                        1/0.252668,
+                                        1/0.087142,
+                                        1/0.145715,
+                                        1/0.229626,
+                                        1/0.149417,
+                                        1/0.139014,
+                                        1/0.249084,
                                         ])
     if args.class_weight:
         loss_function  = MaskedNLLLoss(loss_weights.cuda() if cuda else loss_weights)
