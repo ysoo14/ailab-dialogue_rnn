@@ -222,7 +222,7 @@ class NewDialogueRNNCell(nn.Module):
         if n_hist.size()[0] != 0:
             n_hist = n_hist.view(-1, U.size()[0], self.D_n)
 
-        n_ = self.n_cell(torch.cat([U, q0_unsel], dim=1), torch.zeros(U.size()[0],self.D_n).type(U.type()) if n_hist.size()[0]==0 else n0)
+        n_ = self.n_cell(torch.cat([U, q0_unsel], dim=1), torch.zeros(U.size()[0],self.D_n).type(U.type()) if n_hist.size()[0]==0 else n_hist[-1])
         n_ = self.dropout(n_)
 
        
@@ -293,9 +293,8 @@ class DialogueRNN(nn.Module):
 
         g_ = torch.zeros(U.size()[1],self.D_g).type(U.type())
         n_ = torch.zeros(U.size()[1],self.D_g).type(U.type())
-
         qm_idx = torch.zeros(U.size()[1]).type(U.type())
-        ones = torch.ones(U.size()[1]).type(U.type())
+        ones = torch.ones(U.size()[1]).type(torch.cuda.LongTensor)
 
         q_ = torch.zeros(qmask.size()[1], qmask.size()[2],
                                     self.D_p).type(U.type()) # batch, party, D_p
@@ -304,7 +303,7 @@ class DialogueRNN(nn.Module):
         alpha = []
         for u_,qmask_ in zip(U, qmask): # send one sentence per batch
             g_, q_, e_, n_, qm_idx, alpha_ = self.dialogue_cell(u_, qmask_, g_hist, n_hist_A, n_hist_B, q_, e_, n_)#scenario1
-
+            #g_, q_, e_, alpha_ = self.dialogue_cell(u_, qmask_, g_hist, q_, e_)
             tmp_n = torch.mul((ones - qm_idx).unsqueeze(0).expand(self.D_g, U.size()[1]).permute(1, 0), n_)
             n_hist_A = torch.cat([n_hist_A, tmp_n.unsqueeze(0)],0)
             tmp2_n_ = torch.mul(qm_idx.unsqueeze(0).expand(self.D_g, U.size()[1]).permute(1, 0), n_)
