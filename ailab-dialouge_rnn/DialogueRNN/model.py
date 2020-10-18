@@ -195,7 +195,7 @@ class NewDialogueRNNCell(nn.Module):
 
         return q0_sel, q0_unsel
 
-    def forward(self, U, qmask, g_hist, n_hist, g0, q0, e0):
+    def forward(self, U, qmask, g_hist, n_hist_A, n_hist_B, q0, e0, n0):
         """
         U -> batch, D_m
         qmask -> batch, party
@@ -204,12 +204,24 @@ class NewDialogueRNNCell(nn.Module):
         e0 -> batch, self.D_e
         """
         qm_idx = torch.argmax(qmask, 1) # 0 => man, 1 => woman
-
         q0_sel, q0_unsel = self._select_parties(q0, qm_idx)
-        g_ = self.g_cell(torch.cat([U,q0_sel], dim=1), g0)
+        g_ = self.g_cell(torch.cat([U,q0_sel], dim=1), torch.zeros(U.size()[0],self.D_g).type(U.type()) if g_hist.size()[0]==0 else g_hist[-1])
         g_ = self.dropout(g_)
+        qm_idx_list = qm_idx.data.cpu().numpy().tolist()
 
-        n_ = self.n_cell(torch.cat([U, q0_unsel], dim=1), torch.zeros(U.size()[0],self.D_n).type(U.type()) if n_hist.size()[0]==0 else n_hist[-1])
+        n_hist = torch.zeros(0).type(U.type())
+        for i in range(0, qm_idx.size()[0]):
+            if(qm_idx_list[i] == 0):
+                if n_hist_A.size()[0] != 0:
+                    n_hist = torch.cat([n_hist, n_hist_A[:,i,:]], 0)
+            else:
+                if n_hist_B.size()[0] != 0:
+                    n_hist = torch.cat([n_hist, n_hist_B[:,i,:]], 0)
+
+        if n_hist.size()[0] != 0:
+            n_hist = n_hist.view(-1, U.size()[0], self.D_n)
+        
+        n_ = self.n_cell(torch.cat([U, q0_unsel], dim=1), torch.zeros(U.size()[0],self.D_n).type(U.type()) if n_hist.size()[0]==0 else n0)
         n_ = self.dropout(n_)
 
         if n_hist.size()[0]==0:
@@ -224,7 +236,7 @@ class NewDialogueRNNCell(nn.Module):
         else:
             c_g, alpha = self.attention(g_hist,U)
 
-        U_c_ = torch.cat([U,c_g,n_], dim=1).unsqueeze(1).expand(-1,qmask.size()[1],-1) #(batch, party, U+C)
+        U_c_ = torch.cat([U,c_g,c_n], dim=1).unsqueeze(1).expand(-1,qmask.size()[1],-1) #(batch, party, U+C)
         qs_ = self.p_cell(U_c_.contiguous().view(-1,self.D_m+self.D_g+self.D_p),
                 q0.view(-1, self.D_p)).view(U.size()[0],-1,self.D_p) #current utterance + attention of global states
 
@@ -248,7 +260,7 @@ class NewDialogueRNNCell(nn.Module):
         e_ = self.e_cell(q_sel, e0)
         e_ = self.dropout(e_)
 
-        return g_, q_, e_, n_, alpha
+        return g_, q_, e_, n_, qm_idx, alpha
 
 class DialogueRNN(nn.Module):
 
@@ -270,25 +282,33 @@ class DialogueRNN(nn.Module):
         U -> seq_len, batch, D_m
         qmask -> seq_len, batch, party
         """
-        n_hist = torch.zeros(0).type(U.type())
+        n_hist_A = torch.zeros(0).type(U.type()) #qm_idx == 0
+        n_hist_B = torch.zeros(0).type(U.type()) #qm_idx == 1
+
         g_hist = torch.zeros(0).type(U.type())
 
-        g = torch.zeros(0).type(U.type()) # batch, D_e
-        g0 = torch.zeros(0).type(U.type()) # batch, D_e
-
         g_ = torch.zeros(U.size()[1],self.D_g).type(U.type())
+        n_ = torch.zeros(U.size()[1],self.D_g).type(U.type())
+
+        qm_idx = torch.zeros(U.size()[1]).type(U.type())
+        ones = torch.ones(U.size()[1]).type(U.type())
 
         q_ = torch.zeros(qmask.size()[1], qmask.size()[2],
                                     self.D_p).type(U.type()) # batch, party, D_p
         e_ = torch.zeros(0).type(U.type()) # batch, D_e
         e = e_
         alpha = []
-        for u_,qmask_ in zip(U, qmask): # send one sentence per batch 
-            g_, q_, e_, n_, alpha_ = self.dialogue_cell(u_, qmask_, g_hist, n_hist, g_, q_, e_)#scenario1
-            #g_, q_, e_, g0, alpha_ = self.dialogue_cell(u_, qmask_, g_hist, q_, e_, g0) # scenario2
-            n_hist = torch.cat([n_hist, n_.unsqueeze(0)],0) # stacked scenario1
+        for u_,qmask_ in zip(U, qmask): # send one sentence per batch
+            g_, q_, e_, n_, qm_idx, alpha_ = self.dialogue_cell(u_, qmask_, g_hist, n_hist_A, n_hist_B, q_, e_, n_)#scenario1
+
+            tmp_n = torch.mul((ones - qm_idx).unsqueeze(0).expand(self.D_g, U.size()[1]).permute(1, 0), n_)
+            n_hist_A = torch.cat([n_hist_A, tmp_n.unsqueeze(0)],0)
+            tmp2_n_ = torch.mul(qm_idx.unsqueeze(0).expand(self.D_g, U.size()[1]).permute(1, 0), n_)
+            n_hist_B = torch.cat([n_hist_B, tmp2_n_.unsqueeze(0)],0)
+
             g_hist = torch.cat([g_hist, g_.unsqueeze(0)],0)
             e = torch.cat([e, e_.unsqueeze(0)],0)
+
             if type(alpha_)!=type(None):
                 alpha.append(alpha_[:,0,:])
 
