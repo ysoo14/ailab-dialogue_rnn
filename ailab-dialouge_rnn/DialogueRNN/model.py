@@ -167,8 +167,9 @@ class NewDialogueRNNCell(nn.Module):
 
         self.listener_state = listener_state
         self.g_cell = nn.GRUCell(D_m+D_p,D_g)
-        self.p_cell = nn.GRUCell(D_m+D_g+D_p,D_p)
-        self.e_cell = nn.GRUCell(D_p,D_e)
+        self.p_cell = nn.GRUCell(D_m+D_g,D_p)
+        self.e_cell = nn.GRUCell(D_p+D_g,D_e)
+        self.transform = nn.Linear(D_p, D_m, bias=False)
 
         self.n_cell = nn.GRUCell(D_m+D_p, D_p)
 
@@ -220,24 +221,19 @@ class NewDialogueRNNCell(nn.Module):
 
         if n_hist.size()[0] != 0:
             n_hist = n_hist.view(-1, U.size()[0], self.D_n)
-        
+
         n_ = self.n_cell(torch.cat([U, q0_unsel], dim=1), torch.zeros(U.size()[0],self.D_n).type(U.type()) if n_hist.size()[0]==0 else n0)
         n_ = self.dropout(n_)
 
-        if n_hist.size()[0]==0:
-            c_n = torch.zeros(U.size()[0],self.D_g).type(U.type())
-            alpha_n = None
-        else:
-            c_n, alpha_n = self.attention(n_hist,U)
-
+       
         if g_hist.size()[0]==0:
             c_g = torch.zeros(U.size()[0],self.D_g).type(U.type())
             alpha = None
         else:
             c_g, alpha = self.attention(g_hist,U)
 
-        U_c_ = torch.cat([U,c_g,c_n], dim=1).unsqueeze(1).expand(-1,qmask.size()[1],-1) #(batch, party, U+C)
-        qs_ = self.p_cell(U_c_.contiguous().view(-1,self.D_m+self.D_g+self.D_p),
+        U_c_ = torch.cat([U,c_g], dim=1).unsqueeze(1).expand(-1,qmask.size()[1],-1) #(batch, party, U+C)
+        qs_ = self.p_cell(U_c_.contiguous().view(-1,self.D_m+self.D_g),
                 q0.view(-1, self.D_p)).view(U.size()[0],-1,self.D_p) #current utterance + attention of global states
 
         qs_ = self.dropout(qs_)
@@ -254,10 +250,18 @@ class NewDialogueRNNCell(nn.Module):
 
         qmask_ = qmask.unsqueeze(2)
         q_ = ql_*(1-qmask_) + qs_*qmask_ #speaker's state in qmask_index and listener's state in 1-qmask_index
+
         e0 = torch.zeros(qmask.size()[0], self.D_e).type(U.type()) if e0.size()[0]==0\
                 else e0
         q_sel, q_unsel = self._select_parties(q_,qm_idx)
-        e_ = self.e_cell(q_sel, e0)
+
+        if n_hist.size()[0]==0:
+            c_n = torch.zeros(U.size()[0],self.D_g).type(U.type())
+            alpha_n = None
+        else:
+            c_n, alpha_n = self.attention(n_hist, self.transform(q_sel))
+
+        e_ = self.e_cell(torch.cat([q_sel, c_n], dim=1), e0)
         e_ = self.dropout(e_)
 
         return g_, q_, e_, n_, qm_idx, alpha

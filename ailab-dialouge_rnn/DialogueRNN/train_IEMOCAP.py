@@ -94,13 +94,13 @@ def train_or_eval_model(model, loss_function, dataloader, epoch, optimizer=None,
         textf, visuf, acouf, qmask, umask, label =\
                 [d.cuda() for d in data[:-1]] if cuda else data[:-1]
          #log_prob = model(torch.cat((textf,acouf,visuf),dim=-1), qmask,umask,att2=True) # seq_len, batch, n_classes
-        #log_prob, alpha, alpha_f, alpha_b = model(textf, qmask,umask,att2=False, bidirectional = False) 
+        log_prob, alpha, alpha_f, alpha_b = model(textf, qmask,umask,att2=False, bidirectional = False) 
         # seq_len, batch, n_classes, uni-directional without attention
         #log_prob, alpha, alpha_f, alpha_b = model(textf, qmask,umask,att2=True, bidirectional = False) 
         # # seq_len, batch, n_classes, uni-directional with attention
         #log_prob, alpha, alpha_f, alpha_b = model(textf, qmask,umask,att2=False, bidirectional = True) 
         # # seq_len, batch, n_classes, bidirectional without attention
-        log_prob, alpha, alpha_f, alpha_b = model(textf, qmask,umask,att2=True, bidirectional = True) 
+        #log_prob, alpha, alpha_f, alpha_b = model(textf, qmask,umask,att2=True, bidirectional = True) 
         # # seq_len, batch, n_classes, bidirectional with attention
         lp_ = log_prob.transpose(0,1).contiguous().view(-1,log_prob.size()[2]) # batch*seq_len, n_classes
         labels_ = label.view(-1) # batch*seq_len
