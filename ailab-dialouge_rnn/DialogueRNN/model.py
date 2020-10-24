@@ -167,8 +167,8 @@ class NewDialogueRNNCell(nn.Module):
 
         self.listener_state = listener_state
         self.g_cell = nn.GRUCell(D_m+D_p,D_g)
-        self.p_cell = nn.GRUCell(D_m+D_g,D_p)
-        self.e_cell = nn.GRUCell(D_p+D_g,D_e)
+        self.p_cell = nn.GRUCell(D_m+D_g+D_g,D_p)
+        self.e_cell = nn.GRUCell(D_p,D_e)
         self.transform = nn.Linear(D_p, D_m, bias=False)
 
         self.n_cell = nn.GRUCell(D_m+D_p, D_p)
@@ -232,8 +232,14 @@ class NewDialogueRNNCell(nn.Module):
         else:
             c_g, alpha = self.attention(g_hist,U)
 
-        U_c_ = torch.cat([U,c_g], dim=1).unsqueeze(1).expand(-1,qmask.size()[1],-1) #(batch, party, U+C)
-        qs_ = self.p_cell(U_c_.contiguous().view(-1,self.D_m+self.D_g),
+        if n_hist.size()[0]==0:
+            c_n = torch.zeros(U.size()[0],self.D_g).type(U.type())
+            alpha_n = None
+        else:
+            c_n, alpha_n = self.attention(n_hist, U)
+
+        U_c_ = torch.cat([U,c_g,c_n], dim=1).unsqueeze(1).expand(-1,qmask.size()[1],-1) #(batch, party, U+C)
+        qs_ = self.p_cell(U_c_.contiguous().view(-1,self.D_m+self.D_g+self.D_g),
                 q0.view(-1, self.D_p)).view(U.size()[0],-1,self.D_p) #current utterance + attention of global states
 
         qs_ = self.dropout(qs_)
@@ -255,13 +261,7 @@ class NewDialogueRNNCell(nn.Module):
                 else e0
         q_sel, q_unsel = self._select_parties(q_,qm_idx)
 
-        if n_hist.size()[0]==0:
-            c_n = torch.zeros(U.size()[0],self.D_g).type(U.type())
-            alpha_n = None
-        else:
-            c_n, alpha_n = self.attention(n_hist, self.transform(q_sel))
-
-        e_ = self.e_cell(torch.cat([q_sel, c_n], dim=1), e0)
+        e_ = self.e_cell(q_sel, e0)
         e_ = self.dropout(e_)
 
         return g_, q_, e_, n_, qm_idx, alpha
@@ -278,7 +278,7 @@ class DialogueRNN(nn.Module):
         self.D_e = D_e
         self.dropout = nn.Dropout(dropout)
 
-        self.dialogue_cell = NewDialogueRNNCell(D_m, D_g, D_p, D_e,
+        self.dialogue_cell = DialogueRNNCell(D_m, D_g, D_p, D_e,
                             listener_state, context_attention, D_a, dropout)
 
     def forward(self, U, qmask):
@@ -302,12 +302,12 @@ class DialogueRNN(nn.Module):
         e = e_
         alpha = []
         for u_,qmask_ in zip(U, qmask): # send one sentence per batch
-            g_, q_, e_, n_, qm_idx, alpha_ = self.dialogue_cell(u_, qmask_, g_hist, n_hist_A, n_hist_B, q_, e_, n_)#scenario1
-            #g_, q_, e_, alpha_ = self.dialogue_cell(u_, qmask_, g_hist, q_, e_)
-            tmp_n = torch.mul((ones - qm_idx).unsqueeze(0).expand(self.D_g, U.size()[1]).permute(1, 0), n_)
-            n_hist_A = torch.cat([n_hist_A, tmp_n.unsqueeze(0)],0)
-            tmp2_n_ = torch.mul(qm_idx.unsqueeze(0).expand(self.D_g, U.size()[1]).permute(1, 0), n_)
-            n_hist_B = torch.cat([n_hist_B, tmp2_n_.unsqueeze(0)],0)
+            #g_, q_, e_, n_, qm_idx, alpha_ = self.dialogue_cell(u_, qmask_, g_hist, n_hist_A, n_hist_B, q_, e_, n_)#scenario1
+            g_, q_, e_, alpha_ = self.dialogue_cell(u_, qmask_, g_hist, q_, e_)
+            # tmp_n = torch.mul((ones - qm_idx).unsqueeze(0).expand(self.D_g, U.size()[1]).permute(1, 0), n_)
+            # n_hist_A = torch.cat([n_hist_A, tmp_n.unsqueeze(0)],0)
+            # tmp2_n_ = torch.mul(qm_idx.unsqueeze(0).expand(self.D_g, U.size()[1]).permute(1, 0), n_)
+            # n_hist_B = torch.cat([n_hist_B, tmp2_n_.unsqueeze(0)],0)
 
             g_hist = torch.cat([g_hist, g_.unsqueeze(0)],0)
             e = torch.cat([e, e_.unsqueeze(0)],0)
