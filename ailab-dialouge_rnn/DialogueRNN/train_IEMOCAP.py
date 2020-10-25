@@ -152,13 +152,13 @@ if __name__ == '__main__':
                         help='dropout rate')
     parser.add_argument('--batch-size', type=int, default=30, metavar='BS',
                         help='batch size')
-    parser.add_argument('--epochs', type=int, default=60, metavar='E',
+    parser.add_argument('--epochs', type=int, default=1, metavar='E',
                         help='number of epochs')
     parser.add_argument('--class-weight', action='store_true', default=True,
                         help='class weight')
     parser.add_argument('--active-listener', action='store_true', default=False,
                         help='active listener')
-    parser.add_argument('--attention', default='general', help='Attention type')
+    parser.add_argument('--attention', default='general2', help='Attention type')
     parser.add_argument('--tensorboard', action='store_true', default=False,
                         help='Enables tensorboard log')
     args = parser.parse_args()
