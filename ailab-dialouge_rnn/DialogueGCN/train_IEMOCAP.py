@@ -191,27 +191,27 @@ if __name__ == '__main__':
 
     parser.add_argument('--base-model', default='LSTM', help='base recurrent model, must be one of DialogRNN/LSTM/GRU')
 
-    parser.add_argument('--graph-model', action='store_true', default=False, help='whether to use graph model after recurrent encoding')
+    parser.add_argument('--graph-model', action='store_true', default=True, help='whether to use graph model after recurrent encoding')
 
-    parser.add_argument('--nodal-attention', action='store_true', default=False, help='whether to use nodal attention in graph model: Equation 4,5,6 in Paper')
+    parser.add_argument('--nodal-attention', action='store_true', default=True, help='whether to use nodal attention in graph model: Equation 4,5,6 in Paper')
 
     parser.add_argument('--windowp', type=int, default=10, help='context window size for constructing edges in graph model for past utterances')
 
     parser.add_argument('--windowf', type=int, default=10, help='context window size for constructing edges in graph model for future utterances')
 
-    parser.add_argument('--lr', type=float, default=0.0001, metavar='LR', help='learning rate')
+    parser.add_argument('--lr', type=float, default=0.0003, metavar='LR', help='learning rate')
     
-    parser.add_argument('--l2', type=float, default=0.00001, metavar='L2', help='L2 regularization weight')
+    parser.add_argument('--l2', type=float, default=0.0, metavar='L2', help='L2 regularization weight')
     
     parser.add_argument('--rec-dropout', type=float, default=0.1, metavar='rec_dropout', help='rec_dropout rate')
     
-    parser.add_argument('--dropout', type=float, default=0.5, metavar='dropout', help='dropout rate')
+    parser.add_argument('--dropout', type=float, default=0.4, metavar='dropout', help='dropout rate')
     
     parser.add_argument('--batch-size', type=int, default=32, metavar='BS', help='batch size')
     
     parser.add_argument('--epochs', type=int, default=60, metavar='E', help='number of epochs')
     
-    parser.add_argument('--class-weight', action='store_true', default=False, help='use class weights')
+    parser.add_argument('--class-weight', action='store_true', default=True, help='use class weights')
     
     parser.add_argument('--active-listener', action='store_true', default=False, help='active listener')
     
@@ -221,7 +221,6 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     print(args)
-
     args.cuda = torch.cuda.is_available() and not args.no_cuda
     if args.cuda:
         print('Running on GPU')
