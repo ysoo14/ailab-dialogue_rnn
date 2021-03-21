@@ -828,8 +828,8 @@ class DialogueGCNModel(nn.Module):
             self.dialog_rnn_r = DialogueRNN(D_m, D_g, D_p, D_e, listener_state, context_attention, D_a, dropout_rec)
 
         elif self.base_model == 'LSTM':
+            #self.lstm = nn.LSTM(input_size=768, hidden_size=D_e, num_layers=2, bidirectional=True, dropout=dropout)
             self.lstm = nn.LSTM(input_size=D_m, hidden_size=D_e, num_layers=2, bidirectional=True, dropout=dropout)
-
         elif self.base_model == 'GRU':
             self.gru = nn.GRU(input_size=D_m, hidden_size=D_e, num_layers=2, bidirectional=True, dropout=dropout)
 
@@ -840,16 +840,17 @@ class DialogueGCNModel(nn.Module):
         else:
             print ('Base model must be one of DialogRNN/LSTM/GRU')
             raise NotImplementedError 
-
+        self.linear = nn.Linear(768, 100)
         n_relations = 2 * n_speakers ** 2
         self.window_past = window_past
         self.window_future = window_future
-
-        self.att_model = MaskedEdgeAttention(2*D_e, max_seq_len, self.no_cuda)
+        
+        #self.att_model = MaskedEdgeAttention(2*D_e, max_seq_len, self.no_cuda)
+        self.att_model = MaskedEdgeAttention(768, max_seq_len, self.no_cuda)
         self.nodal_attention = nodal_attention
 
-        self.graph_net = GraphNetwork(2*D_e, n_classes, n_relations, max_seq_len, graph_hidden_size, dropout, self.no_cuda)
-
+        #self.graph_net = GraphNetwork(2*D_e, n_classes, n_relations, max_seq_len, graph_hidden_size, dropout, self.no_cuda)
+        self.graph_net = GraphNetwork(768, n_classes, n_relations, max_seq_len, graph_hidden_size, dropout, self.no_cuda)
         edge_type_mapping = {}
         for j in range(n_speakers):
             for k in range(n_speakers):
@@ -875,7 +876,7 @@ class DialogueGCNModel(nn.Module):
         return pad_sequence(xfs)
 
 
-    def forward(self, U, qmask, umask, seq_lengths):
+    def forward(self, qmask, umask, seq_lengths, bertEncoded):
         """
         U -> seq_len, batch, D_m
         qmask -> seq_len, batch, party
@@ -894,7 +895,9 @@ class DialogueGCNModel(nn.Module):
                 emotions = torch.cat([emotions_f,emotions_b],dim=-1)
 
         elif self.base_model == 'LSTM':
-            emotions, hidden = self.lstm(U)
+            emotions = bertEncoded.permute(1,0,2)
+            # U_ = self.linear(bertEncoded.permute(1,0,2))
+            # emotions, hidden = self.lstm(U_)
 
         elif self.base_model == 'GRU':
             emotions, hidden = self.gru(U)

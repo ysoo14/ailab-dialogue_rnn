@@ -135,11 +135,11 @@ def train_or_eval_graph_model(model, loss_function, dataloader, epoch, cuda, opt
         if train:
             optimizer.zero_grad()
         
-        textf, visuf, acouf, qmask, umask, label = [d.cuda() for d in data[:-1]] if cuda else data[:-1]
+        qmask, umask, label, bertEncoded = [d.cuda() for d in data[:-1]] if cuda else data[:-1]
 
         lengths = [(umask[j] == 1).nonzero().tolist()[-1][0] + 1 for j in range(len(umask))]
 
-        log_prob, e_i, e_n, e_t, e_l = model(textf, qmask, umask, lengths)
+        log_prob, e_i, e_n, e_t, e_l = model(qmask, umask, lengths, bertEncoded)
         label = torch.cat([label[j][:lengths[j]] for j in range(len(label))])
         loss = loss_function(log_prob, label)
 
