@@ -35,7 +35,8 @@ class IEMOCAPDataset(Dataset):
         vid = self.keys[index]
         ex =  self.bertEncoding(vid)
 
-        return torch.FloatTensor([[1,0] if x=='M' else [0,1] for x in\
+        return torch.FloatTensor(self.videoText[vid]),\
+               torch.FloatTensor([[1,0] if x=='M' else [0,1] for x in\
                                   self.videoSpeakers[vid]]),\
                torch.FloatTensor([1]*len(self.videoLabels[vid])),\
                torch.LongTensor(self.videoLabels[vid]),\
@@ -46,7 +47,7 @@ class IEMOCAPDataset(Dataset):
         return self.len
 
     def bertEncoding(self, vid):
-        rSentences = self.getSentences(vid)
+        rSentences = self.videoSentence[vid]
         inputs = self.tokenizer(rSentences, padding=True, truncation=True, return_tensors='pt').to(self.device)
         inputs['input_ids'] = inputs['input_ids'].view(-1, len(rSentences))
         inputs['token_type_ids'] = inputs['token_type_ids'].view(-1, len(rSentences))
@@ -205,52 +206,72 @@ class DailyDialogueDataset2(Dataset):
         return [pad_sequence(dat[i]) if i < 2 else pad_sequence(dat[i], True) if i < 4 else dat[i].tolist() for i in
                 dat]
 
-# def tsne_visualize(feature, label, fileName):
-#     colors = ['#476A2A', '#7851B8', '#BD3430', '#4A2D4E', '#875525',
-#                '#A83683', '#4E655E', '#853541', '#3A3120', '#535D8E']
+def tsne_visualize(feature, label, fileName):
+    colors = ['#476A2A', '#7851B8', '#BD3430', '#4A2D4E', '#875525',
+               '#A83683', '#4E655E', '#853541', '#3A3120', '#535D8E']
 
-#     tsne = TSNE(n_components=2, verbose=1, n_iter=300, perplexity=5)
-#     tsne_v = tsne.fit_transform(feature)
+    tsne = TSNE(n_components=2, verbose=1, n_iter=1000, perplexity=5)
+    tsne_v = tsne.fit_transform(feature)
+    plt.figure()
+    for i in range(len(feature)): 
+        plt.text(tsne_v[i, 0], tsne_v[i, 1], str(i) + label[int(feature['labels'][i])], # x, y, 그룹; str은 문자로 변환
+                color=colors[int(feature['labels'][i])], # 산점도 색상
+                fontdict={'weight':'bold', 'size':9}) # font 설정
 
-#     for i in range(len(feature)): 
-#         plt.text(tsne_v[i, 0], tsne_v[i, 1], label[int(feature['labels'][i])], # x, y, 그룹; str은 문자로 변환
-#                 color=colors[int(feature['labels'][i])], # 산점도 색상
-#                 fontdict={'weight':'bold', 'size':9}) # font 설정
+    plt.xlim(tsne_v[:, 0].min(), tsne_v[:,0].max()) # 최소, 최대
+    plt.ylim(tsne_v[:, 1].min(), tsne_v[:,1].max()) # 최소, 최대
+    plt.xlabel('first principle component') # x 축 이름
+    plt.ylabel('second principle componet') # y 축 이름
+    plt.savefig('./data_visualize/' + str(fileName) + '.png', dpi=300)
 
-#     plt.xlim(tsne_v[:, 0].min(), tsne_v[:,0].max()) # 최소, 최대
-#     plt.ylim(tsne_v[:, 1].min(), tsne_v[:,1].max()) # 최소, 최대
-#     plt.xlabel('first principle component') # x 축 이름
-#     plt.ylabel('second principle componet') # y 축 이름
-#     plt.savefig(str(fileName) + '.png', dpi=300)
+if __name__ == '__main__':
 
-# if __name__ == '__main__':
-
-#     data = IEMOCAPDataset()
+    data = IEMOCAPDataset()
     
-#     cnn = np.array([])
-#     bert = np.array([])
-#     label = np.array([])
-#     idx = 0
 
-#     for d in data:
-#         label = np.concatenate((label,d[3].cpu().detach().numpy()))
-#         if idx == 0:
-#             cnn = d[0].cpu().detach().numpy()
-#             bert = d[4].cpu().detach().numpy()
-#         else:
-#             cnn = np.vstack((cnn,d[0].cpu().detach().numpy()))
-#             bert = np.vstack((bert, d[4].cpu().detach().numpy()))
+    label_str = ['h', 's', 'n', 'a', 'e', 'f']
 
-#         idx += 1
+    # all dialogue
+    cnn = np.array([])
+    # bert = np.array([])
+    label = np.array([])
+    # idx = 0
+    # for d in data:
+    #     label = np.concatenate((label,d[3].cpu().detach().numpy()))
+    #     if idx == 0:
+    #         cnn = d[0].cpu().detach().numpy()
+    #         bert = d[4].cpu().detach().numpy()
+    #     else:
+    #         cnn = np.vstack((cnn,d[0].cpu().detach().numpy()))
+    #         bert = np.vstack((bert, d[4].cpu().detach().numpy()))
+
+    #     idx += 1
     
-#     labels = pd.DataFrame(label)
-#     labels.columns = ['labels']
-#     data_cnn = pd.DataFrame(cnn)
-#     feature_cnn = pd.concat([data_cnn,labels],axis=1)
+    labels = pd.DataFrame(label)
+    labels.columns = ['labels']
+    data_cnn = pd.DataFrame(cnn)
+    feature_cnn = pd.concat([data_cnn,labels],axis=1)
 
-#     data_bert = pd.DataFrame(bert)
-#     feature_bert = pd.concat([data_cnn,labels],axis=1)
+    # data_bert = pd.DataFrame(bert)
+    # feature_bert = pd.concat([data_bert,labels],axis=1)
 
-#     label_str = ['h', 's', 'n', 'a', 'e', 'f']
-#     tsne_visualize(feature=feature_bert, label=label_str, fileName='bert')
-#     tsne_visualize(feature=feature_cnn, label=label_str, fileName='cnn')
+    # tsne_visualize(feature=feature_bert, label=label_str, fileName='bert')
+    # tsne_visualize(feature=feature_cnn, label=label_str, fileName='cnn')
+
+    # individual dialogue visualization
+
+    for d in data:
+        label = np.array([])
+        
+        label = np.concatenate((label,d[3].cpu().detach().numpy()))
+
+        cnn = d[0].cpu().detach().numpy()
+
+        labels = pd.DataFrame(label)
+        labels.columns = ['labels']
+        data_cnn = pd.DataFrame(cnn)
+        feature_cnn = pd.concat([data_cnn,labels],axis=1)
+
+        tsne_visualize(feature=feature_cnn, label=label_str, fileName=d[-1])
+
+
